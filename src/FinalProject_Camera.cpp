@@ -7,6 +7,7 @@
 #include <vector>
 #include <cmath>
 #include <limits>
+#include <experimental/filesystem>
 #include <opencv2/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -21,6 +22,7 @@
 #include "camFusion.hpp"
 
 using namespace std;
+namespace stdFs = std::experimental::filesystem;
 
 /* MAIN PROGRAM */
 int main(int argc, const char *argv[])
@@ -73,6 +75,38 @@ int main(int argc, const char *argv[])
     int dataBufferSize = 2;       // no. of images which are held in memory (ring buffer) at the same time
     vector<DataFrame> dataBuffer; // list of data frames which are held in memory at the same time
     bool bVis = true;            // visualize results
+
+    string detectorType = "HARRIS";   // SHITOMASI, HARRIS, FAST, BRISK, ORB, AKAZE, SIFT;
+    string descriptorType = "SIFT"; // BRISK, BRIEF, ORB, FREAK, AKAZE, SIFT
+
+    std::string trackDir = dataPath+"dat/tracked_data/";
+    std::string trackFilePath = trackDir+detectorType+"_"+descriptorType+".csv";
+
+    std::uintmax_t num_deleted = stdFs::remove(stdFs::path(trackFilePath));
+    if(num_deleted > 0)
+    {
+        std::cout << "Deleted " << num_deleted << " files or directories\n";
+    }
+    else std::cout << "Cannot delete file or directory\n";
+
+    auto lambdaWriteToFile = [](std::string& filePath, string& content){
+        auto fstreamDeleter = [](std::fstream* file){
+            file->close();
+        };
+
+        std::unique_ptr<std::fstream, decltype(fstreamDeleter)> upFs(new std::fstream(), fstreamDeleter);
+        upFs.get()->open(filePath, std::ios::app);
+        if(upFs.get()->is_open() == false)
+        {
+            std::cout << "Cannot open " << filePath << "\n";
+        }
+        upFs.get()->write(content.c_str(), content.size());
+    };
+
+    {
+        std::string cols = "Frame,ttc_lidar,ttc_cam\n";
+        lambdaWriteToFile(trackFilePath, cols);
+    }
 
     /* MAIN LOOP OVER ALL IMAGES */
 
@@ -147,7 +181,6 @@ int main(int argc, const char *argv[])
 
         // extract 2D keypoints from current image
         vector<cv::KeyPoint> keypoints; // create empty feature list for current image
-        string detectorType = "FAST";
 
         if (detectorType.compare("SHITOMASI") == 0)
         {
@@ -185,7 +218,6 @@ int main(int argc, const char *argv[])
         /* EXTRACT KEYPOINT DESCRIPTORS */
 
         cv::Mat descriptors;
-        string descriptorType = "SIFT"; // BRISK, BRIEF, ORB, FREAK, AKAZE, SIFT
         descKeypoints((dataBuffer.end() - 1)->keypoints, (dataBuffer.end() - 1)->cameraImg, descriptors, descriptorType);
 
         // push descriptors for current frame to end of data buffer
@@ -200,9 +232,9 @@ int main(int argc, const char *argv[])
             /* MATCH KEYPOINT DESCRIPTORS */
 
             vector<cv::DMatch> matches;
-            string matcherType = "MAT_FLANN";        // MAT_BF, MAT_FLANN
-            string descriptorType = "DES_BINARY"; // DES_BINARY, DES_HOG
-            string selectorType = "SEL_KNN";       // SEL_NN, SEL_KNN
+            string matcherType = "MAT_FLANN";           // MAT_BF, MAT_FLANN
+            string descriptorCategory = "DES_BINARY";   // DES_BINARY, DES_HOG
+            string selectorType = "SEL_KNN";            // SEL_NN, SEL_KNN
 
             matchDescriptors((dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints,
                              (dataBuffer.end() - 2)->descriptors, (dataBuffer.end() - 1)->descriptors,
@@ -264,11 +296,14 @@ int main(int argc, const char *argv[])
                     //// TASK FP.3 -> assign enclosed keypoint matches to bounding box (implement -> clusterKptMatchesWithROI)
                     //// TASK FP.4 -> compute time-to-collision based on camera (implement -> computeTTCCamera)
                     double ttcCamera;
-                    std::cout << "Before run, currBB matches size: " << currBB->kptMatches.size() << "\n";
-                    clusterKptMatchesWithROI(*currBB, (dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints, (dataBuffer.end() - 1)->kptMatches);                    
-                    std::cout << "After run, currBB matches size: " << currBB->kptMatches.size() << "\n";
+                    std::cout << "Before clusterKptMatchesWithROI() - currBB->kptMatches.size() = " << currBB->kptMatches.size() << "\n";
+                    clusterKptMatchesWithROI(*currBB, (dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints, (dataBuffer.end() - 1)->kptMatches);
+                    std::cout << "After clusterKptMatchesWithROI() - currBB->kptMatches.size() = " << currBB->kptMatches.size() << "\n";                    
                     computeTTCCamera((dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints, currBB->kptMatches, sensorFrameRate, ttcCamera);
                     //// EOF STUDENT ASSIGNMENT
+
+                    std::string log_row = imgNumber.str()+","+std::to_string(ttcLidar)+","+std::to_string(ttcCamera)+"\n";
+                    lambdaWriteToFile(trackFilePath, log_row);
 
                     bVis = true;
                     if (bVis)

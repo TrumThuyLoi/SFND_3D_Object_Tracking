@@ -34,3 +34,35 @@ In this final project, you will implement the missing parts in the schematic. To
 2. Make a build directory in the top level project directory: `mkdir build && cd build`
 3. Compile: `cmake .. && make`
 4. Run it: `./3D_object_tracking`.
+
+## How I Addressed Each Rubric Point
+
+### FP.1 Match 3D Objects
+    * I create a 2D matrix, size of first dimention is number of previous frame bounding boxes, size of the second dimention is number of current frame bounding boxes.
+    * Then I loop through all matches and find the element of the matrix that the match keypoint belong to, then add 1 to that maxtrix element.
+    * After the loop, I pic the highest number of keypoint correspondences for each previous frame bounding boxes and make it is the best pair bounding boxes.
+
+### FP.2 Compute Lidar-based TTC
+    * Firstly, find minXPrev (min x of previous frame) and minXCurr (min x of current frame)
+    * Then, apply fomular: TTC = minXCurr * dT / (minXPrev - minXCurr)
+    * with dT is the time between previous frame and current frame.
+
+### FP.3 Associate Keypoint Correspondences with Bounding Boxes
+    * I store all the matches that have current frame keypoint inside ROI of current frame in the kptMatches attribute.
+
+### FP.4 Compute Camera-based TTC
+    * Firstly, I compute relative distances between keypoints in previous frame and current frame.
+    * Note that we avoid any distPrev that nearly 0 and distCurr that smaller than minDist (in this case 100).
+    * distPrev and distCurr then used to compute distRatios, and all distRatio is stored in a std::vector.
+    * Then we find the median of distRatio.
+    * Finaly, apply fomular: TTC = -dT / (1.0 - *itMedian);
+    * with dT is the time between previous frame and current frame.
+
+### FP.5 Performance Evaluation 1
+    * I log the TTC of Lidar in ./dat/tracked_data folder. Some of them are negative bacause in that case the preceding vehicle is move far away.
+
+### FP.6 Performance Evaluation 2
+    * I choose top 3 detector / descriptor combinations that I reported in the midterm project to run this test. They are: FAST + SIFT, HARRIS + SIFT, SHITOMASI + SIFT.
+    * FAST + SIFT and SHITOMASI + SIFT combinations works very good but HARRIS + SIFT combination give some unexpected results.
+    * The "nan" result because all distPrev and distCurr don't satisfy the conditions.
+    * The "-inf" result because the ditsRatio median nearly 1.

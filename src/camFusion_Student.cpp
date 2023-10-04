@@ -141,10 +141,9 @@ void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint
 {
     for(cv::DMatch& match : kptMatches)
     {
-        auto itPrevFrKpt = kptsPrev.begin() + match.queryIdx;
         auto itCurrFrKpt = kptsCurr.begin() + match.trainIdx;
 
-        if(boundingBox.roi.contains(itPrevFrKpt->pt))
+        if(boundingBox.roi.contains(itCurrFrKpt->pt))
         {
             boundingBox.kptMatches.emplace_back(match);
         }
@@ -187,10 +186,12 @@ void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPo
 
     auto itMedian = distRatios.begin() + distRatios.size()/2;
     std::nth_element(distRatios.begin(), itMedian, distRatios.end());
-    double sumBeforeMedian = std::accumulate(distRatios.begin(), itMedian, 0);
-    double sumAfterMedian = std::accumulate(itMedian, distRatios.end(), 0);
-    std::cout << "sumBeforeMedian: " << sumBeforeMedian << " - sumAfterMedian: " << sumAfterMedian << "\n";
-    assert(sumBeforeMedian < sumAfterMedian);
+    auto itMaxLeft = std::max_element(distRatios.begin(), itMedian);
+    auto itMinRight = std::min_element(itMedian+1, distRatios.end());
+    std::cout << "maxLeft: " << *itMaxLeft << " - Median: " << *itMedian << " - minRight: " << *itMinRight << "\n";
+    assert(*itMaxLeft <= *itMedian && *itMedian <= *itMinRight);
+
+    TTC = -(1.0/frameRate) / (1.0 - *itMedian);
 }
 
 
@@ -209,17 +210,16 @@ void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev,
     double minXPrev = lambdaFindMinX(lidarPointsPrev);
     double minXCurr = lambdaFindMinX(lidarPointsCurr);
     
+    std::cout << "minXPrev: " << minXPrev << ", minXCurr: " << minXCurr << "\n";
+
     TTC = minXCurr * (1.0/frameRate) / (minXPrev - minXCurr); 
 }
 
 
 void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame)
 {
-    std::unordered_map<int, std::vector<int>> countMatches;
-    for(BoundingBox& prevFrBox : prevFrame.boundingBoxes)
-    {
-        countMatches.insert({prevFrBox.boxID, std::vector<int>(currFrame.boundingBoxes.size(), 0)});
-    }
+    std::vector<std::vector<int>> countMatches(prevFrame.boundingBoxes.size(), 
+                                                std::vector<int>(currFrame.boundingBoxes.size(), 0));
 
     auto lambdaFindContainBBox = [](std::vector<BoundingBox>& bboxes, cv::KeyPoint& kp){
         int resultIdx = -1;
@@ -236,7 +236,6 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
 
     for(cv::DMatch& match : matches)
     {
-        // std::cout << "query descriptor index: " << match.queryIdx << "\ntrain descriptor index: " << match.trainIdx << "\n";
         auto itPrevFrPoint = prevFrame.keypoints.begin() + match.queryIdx;
         auto itCurrFrPoint = currFrame.keypoints.begin() + match.trainIdx;
 
@@ -245,19 +244,16 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
 
         if(prevFrBoxID != -1 && currFrBoxID != -1)
         {
-            countMatches[prevFrBoxID].at(currFrBoxID) += 1;
+            countMatches[prevFrBoxID][currFrBoxID] += 1;
         }
     }
 
     for(BoundingBox& prevFrBox : prevFrame.boundingBoxes)
     {
-        auto listCount = countMatches.find(prevFrBox.boxID);
-        int maxIdx = max_element(listCount->second.begin(), listCount->second.end()) - listCount->second.begin();
-        if(listCount->second[maxIdx] <= 0)
+        auto listCount = countMatches.begin() + prevFrBox.boxID;
+        int maxIdx = max_element(listCount->begin(), listCount->end()) - listCount->begin();
+        if(listCount->at(maxIdx) <= 0)
             continue;
-        
-        std::cout   << "Best match BBox prevFrBoxID: " << prevFrBox.boxID << ", classID: " << prevFrBox.classID 
-                    << "; currFrBoxID: " << maxIdx << ", classID: " << currFrame.boundingBoxes[maxIdx].classID << "\n";
 
         bbBestMatches.insert({prevFrBox.boxID, maxIdx});
     }
