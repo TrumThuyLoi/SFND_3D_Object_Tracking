@@ -24,22 +24,14 @@
 using namespace std;
 namespace stdFs = std::experimental::filesystem;
 
-/* MAIN PROGRAM */
-int main(int argc, const char *argv[])
+void processImgs(std::string& dataPath, std::string& imgBasePath, std::string& imgPrefix, std::string& imgFileType, std::string& detectorType,
+                std::string& descriptorType, int imgStartIndex=0, int imgEndIndex=18, int imgStepWidth=1, int imgFillWidth=4)
 {
-    /* INIT VARIABLES AND DATA STRUCTURES */
-
-    // data location
-    string dataPath = "../";
-
-    // camera
-    string imgBasePath = dataPath + "images/";
-    string imgPrefix = "KITTI/2011_09_26/image_02/data/000000"; // left camera, color
-    string imgFileType = ".png";
-    int imgStartIndex = 0; // first file index to load (assumes Lidar and camera names have identical naming convention)
-    int imgEndIndex = 18;   // last file index to load
-    int imgStepWidth = 1; 
-    int imgFillWidth = 4;  // no. of digits which make up the file index (e.g. img-0001.png)
+    // misc
+    double sensorFrameRate = 10.0 / imgStepWidth; // frames per second for Lidar and camera
+    int dataBufferSize = 2;       // no. of images which are held in memory (ring buffer) at the same time
+    vector<DataFrame> dataBuffer; // list of data frames which are held in memory at the same time
+    bool bVis = true;            // visualize results
 
     // object detection
     string yoloBasePath = dataPath + "dat/yolo/";
@@ -68,16 +60,7 @@ int main(int argc, const char *argv[])
     
     P_rect_00.at<double>(0,0) = 7.215377e+02; P_rect_00.at<double>(0,1) = 0.000000e+00; P_rect_00.at<double>(0,2) = 6.095593e+02; P_rect_00.at<double>(0,3) = 0.000000e+00;
     P_rect_00.at<double>(1,0) = 0.000000e+00; P_rect_00.at<double>(1,1) = 7.215377e+02; P_rect_00.at<double>(1,2) = 1.728540e+02; P_rect_00.at<double>(1,3) = 0.000000e+00;
-    P_rect_00.at<double>(2,0) = 0.000000e+00; P_rect_00.at<double>(2,1) = 0.000000e+00; P_rect_00.at<double>(2,2) = 1.000000e+00; P_rect_00.at<double>(2,3) = 0.000000e+00;    
-
-    // misc
-    double sensorFrameRate = 10.0 / imgStepWidth; // frames per second for Lidar and camera
-    int dataBufferSize = 2;       // no. of images which are held in memory (ring buffer) at the same time
-    vector<DataFrame> dataBuffer; // list of data frames which are held in memory at the same time
-    bool bVis = true;            // visualize results
-
-    string detectorType = "HARRIS";   // SHITOMASI, HARRIS, FAST, BRISK, ORB, AKAZE, SIFT;
-    string descriptorType = "SIFT"; // BRISK, BRIEF, ORB, FREAK, AKAZE, SIFT
+    P_rect_00.at<double>(2,0) = 0.000000e+00; P_rect_00.at<double>(2,1) = 0.000000e+00; P_rect_00.at<double>(2,2) = 1.000000e+00; P_rect_00.at<double>(2,3) = 0.000000e+00; 
 
     std::string trackDir = dataPath+"dat/tracked_data/";
     std::string trackFilePath = trackDir+detectorType+"_"+descriptorType+".csv";
@@ -135,7 +118,7 @@ int main(int argc, const char *argv[])
         float confThreshold = 0.2;
         float nmsThreshold = 0.4;        
         detectObjects((dataBuffer.end() - 1)->cameraImg, (dataBuffer.end() - 1)->boundingBoxes, confThreshold, nmsThreshold,
-                      yoloBasePath, yoloClassesFile, yoloModelConfiguration, yoloModelWeights, bVis);
+                    yoloBasePath, yoloClassesFile, yoloModelConfiguration, yoloModelWeights, bVis);
 
         cout << "#2 : DETECT & CLASSIFY OBJECTS done" << endl;
 
@@ -166,7 +149,7 @@ int main(int argc, const char *argv[])
         bVis = true;
         if(bVis)
         {
-            show3DObjects((dataBuffer.end()-1)->boundingBoxes, cv::Size(4.0, 20.0), cv::Size(1000, 1000), true);
+            show3DObjects((dataBuffer.end()-1)->boundingBoxes, cv::Size(4.0, 20.0), cv::Size(1000, 1000), false);
         }
         bVis = false;
 
@@ -237,8 +220,8 @@ int main(int argc, const char *argv[])
             string selectorType = "SEL_KNN";            // SEL_NN, SEL_KNN
 
             matchDescriptors((dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints,
-                             (dataBuffer.end() - 2)->descriptors, (dataBuffer.end() - 1)->descriptors,
-                             matches, descriptorType, matcherType, selectorType);
+                            (dataBuffer.end() - 2)->descriptors, (dataBuffer.end() - 1)->descriptors,
+                            matches, descriptorType, matcherType, selectorType);
 
             // store matches in current data frame
             (dataBuffer.end() - 1)->kptMatches = matches;
@@ -320,16 +303,57 @@ int main(int argc, const char *argv[])
                         cv::namedWindow(windowName, 4);
                         cv::imshow(windowName, visImg);
                         cout << "Press key to continue to next frame" << endl;
-                        cv::waitKey(0);
+                        // cv::waitKey(0);
                     }
                     bVis = false;
 
                 } // eof TTC computation
             } // eof loop over all BB matches            
-
+            
         }
 
     } // eof loop over all images
 
+}
+
+/* MAIN PROGRAM */
+int main(int argc, const char *argv[])
+{
+    /* INIT VARIABLES AND DATA STRUCTURES */
+
+    // data location
+    string dataPath = "../";
+
+    // camera
+    string imgBasePath = dataPath + "images/";
+    string imgPrefix = "KITTI/2011_09_26/image_02/data/000000"; // left camera, color
+    string imgFileType = ".png";
+    int imgStartIndex = 0; // first file index to load (assumes Lidar and camera names have identical naming convention)
+    int imgEndIndex = 18;   // last file index to load
+    int imgStepWidth = 1; 
+    int imgFillWidth = 4;  // no. of digits which make up the file index (e.g. img-0001.png)   
+
+    std::vector<std::string> detectorTypes = {"SHITOMASI", "HARRIS", "FAST", "BRISK", "ORB", "AKAZE", "SIFT"};
+    std::vector<std::string> descriptorTypes = {"BRISK", "ORB", "FREAK", "AKAZE", "SIFT"};
+
+    for(std::string& detectorType : detectorTypes){
+        for(std::string& descriptorType : descriptorTypes){
+            try{
+                processImgs(dataPath, imgBasePath, imgPrefix, imgFileType, detectorType, 
+                            descriptorType, imgStartIndex, imgEndIndex, imgStepWidth, imgFillWidth);
+            }
+            catch(...){
+                std::string trackDir = dataPath+"dat/tracked_data/";
+                std::string trackFilePath = trackDir+detectorType+"_"+descriptorType+".csv";
+
+                std::uintmax_t num_deleted = stdFs::remove(stdFs::path(trackFilePath));
+                if(num_deleted > 0)
+                {
+                    std::cout << "Deleted " << num_deleted << " files or directories\n";
+                }
+                else std::cout << "Cannot delete file or directory\n";
+            }
+        }
+    }
     return 0;
 }

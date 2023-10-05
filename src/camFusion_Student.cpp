@@ -139,13 +139,33 @@ void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, 
 // associate a given bounding box with the keypoints it contains
 void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, std::vector<cv::DMatch> &kptMatches)
 {
-    for(cv::DMatch& match : kptMatches)
-    {
-        auto itCurrFrKpt = kptsCurr.begin() + match.trainIdx;
+    if(kptMatches.size() == 0)
+        return;
 
-        if(boundingBox.roi.contains(itCurrFrKpt->pt))
-        {
-            boundingBox.kptMatches.emplace_back(match);
+    auto lambdaGreaterThan = [&kptsPrev, &kptsCurr](cv::DMatch& lMatch, cv::DMatch& rMatch){
+        auto itPrevFrKpt = kptsPrev.begin() + lMatch.queryIdx;
+        auto itCurrFrKpt = kptsCurr.begin() + lMatch.trainIdx;
+        double leftDist = cv::norm(itPrevFrKpt->pt - itCurrFrKpt->pt);
+
+        itPrevFrKpt = kptsPrev.begin() + rMatch.queryIdx;
+        itCurrFrKpt = kptsCurr.begin() + rMatch.trainIdx;
+        double rightDist = cv::norm(itPrevFrKpt->pt - itCurrFrKpt->pt);
+        //std::cout << "leftDist: " << leftDist << ", rightDistL " << rightDist << "\n";
+        return leftDist > rightDist;
+    };
+
+    std::sort(kptMatches.begin(), kptMatches.end(), lambdaGreaterThan);
+
+    double outlierRatio = 0.05;
+    auto itLeftPivot = kptMatches.begin() + kptMatches.size() * outlierRatio;
+    auto itRightPivot = kptMatches.begin() + kptMatches.size() * (1 - outlierRatio);
+
+    for(auto itMatch = itLeftPivot; itMatch != itRightPivot+1; itMatch++)
+    {
+        auto itCurrFrKpt = kptsCurr.begin() + itMatch->trainIdx;
+
+        if(boundingBox.roi.contains(itCurrFrKpt->pt)){
+            boundingBox.kptMatches.emplace_back(*itMatch);
         }
     }
 }
@@ -198,17 +218,33 @@ void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPo
 void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev,
                      std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC)
 {
-    auto lambdaFindMinX = [](std::vector<LidarPoint>& lidarPoints){
-        double minX = 1e9;
-        for(auto point : lidarPoints)
-        {
-            minX = minX > point.x ? point.x : minX;
-        }
-        return minX;
+    auto lambdaGreaterThan = [](LidarPoint& l, LidarPoint& r){
+        return l.x > r.x;
     };
-    
-    double minXPrev = lambdaFindMinX(lidarPointsPrev);
-    double minXCurr = lambdaFindMinX(lidarPointsCurr);
+
+    std::make_heap(lidarPointsPrev.begin(), lidarPointsPrev.end(), lambdaGreaterThan);
+    std::make_heap(lidarPointsCurr.begin(), lidarPointsCurr.end(), lambdaGreaterThan);
+
+    auto lambdaRmOuliers = [&lambdaGreaterThan](std::vector<LidarPoint>& lidarPoints,  double outlierRatio){
+        int remains = lidarPoints.size() * (1.0 - outlierRatio);
+        while(lidarPoints.size() > remains)
+        {
+            std::pop_heap(lidarPoints.begin(), lidarPoints.end(), lambdaGreaterThan);
+            lidarPoints.pop_back();
+        }
+    };
+
+    lambdaRmOuliers(lidarPointsPrev, 0.05);
+    lambdaRmOuliers(lidarPointsCurr, 0.05);
+
+    double minXPrev = lidarPointsPrev[0].x;
+    double minXCurr = lidarPointsCurr[0].x;
+
+    auto maxVal = std::max_element(lidarPointsPrev.begin(), lidarPointsPrev.end(), [](LidarPoint& l, LidarPoint& r){
+        return l.x < r.x;
+    });
+    std::cout << "minXPrev: " << minXPrev << ", maxVal: " << maxVal->x << "\n";
+    assert(minXPrev < maxVal->x);
     
     std::cout << "minXPrev: " << minXPrev << ", minXCurr: " << minXCurr << "\n";
 

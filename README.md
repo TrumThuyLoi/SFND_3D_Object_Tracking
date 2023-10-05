@@ -43,12 +43,15 @@ In this final project, you will implement the missing parts in the schematic. To
     * After the loop, I pic the highest number of keypoint correspondences for each previous frame bounding boxes and make it is the best pair bounding boxes.
 
 ### FP.2 Compute Lidar-based TTC
-    * Firstly, find minXPrev (min x of previous frame) and minXCurr (min x of current frame)
+    * I remove 5% nearest lidar point of current and previous frame so we can void outliers.
+    * After that, I find minXPrev (min x of previous frame) and minXCurr (min x of current frame)
     * Then, apply fomular: TTC = minXCurr * dT / (minXPrev - minXCurr)
     * with dT is the time between previous frame and current frame.
 
 ### FP.3 Associate Keypoint Correspondences with Bounding Boxes
-    * I store all the matches that have current frame keypoint inside ROI of current frame in the kptMatches attribute.
+    * I sorted kptMatches based on the euclidean distance between keypoints of each pairs in ascending order.
+    * Then I remove 10% matched pairs (5% too close and 5% too far away) to avoid outliers. 
+    * After taht, I store all the remain matches that have current frame keypoint inside ROI of current frame in the kptMatches attribute.
 
 ### FP.4 Compute Camera-based TTC
     * Firstly, I compute relative distances between keypoints in previous frame and current frame.
@@ -59,10 +62,13 @@ In this final project, you will implement the missing parts in the schematic. To
     * with dT is the time between previous frame and current frame.
 
 ### FP.5 Performance Evaluation 1
-    * I log the TTC of Lidar in ./dat/tracked_data folder. Some of them are negative bacause in that case the preceding vehicle is move far away.
+    * I log the TTC of Lidar in ./dat/tracked_data folder. Some of them may are negative bacause in that case the preceding vehicle is move far away.
+    * Because we are using constant velocity model so that they work does not correctly when relative velocity with preceding vehicle is decrease.
 
 ### FP.6 Performance Evaluation 2
-    * I choose top 3 detector / descriptor combinations that I reported in the midterm project to run this test. They are: FAST + SIFT, HARRIS + SIFT, SHITOMASI + SIFT.
-    * FAST + SIFT and SHITOMASI + SIFT combinations works very good but HARRIS + SIFT combination give some unexpected results.
+    * There are 7 possible detector + descriptor combinations. 
+    * They are: AKAZE + SIFT, BRISK + SIFT, FAST + SIFT, HARRIS + SIFT, ORB + SIFT, SHITOMASI + SIFT, SIFT + SIFT.
+    * AKAZE + SIFT, BRISK + SIFT, FAST + SIFT, SHITOMASI + SIFT, SIFT + SIFT combinations works very good.
+    * HARRIS + SIFT, ORB + SIFT combination give some unexpected results.
     * The "nan" result because all distPrev and distCurr don't satisfy the conditions.
     * The "-inf" result because the ditsRatio median nearly 1.
