@@ -66,9 +66,6 @@ In this final project, you will implement the missing parts in the schematic. To
     * Because we are using constant velocity model so that they work does not correctly when relative velocity with preceding vehicle is decrease.
 
 ### FP.6 Performance Evaluation 2
-    * There are 7 possible detector + descriptor combinations. 
-    * They are: AKAZE + SIFT, BRISK + SIFT, FAST + SIFT, HARRIS + SIFT, ORB + SIFT, SHITOMASI + SIFT, SIFT + SIFT.
-    * AKAZE + SIFT, BRISK + SIFT, FAST + SIFT, SHITOMASI + SIFT, SIFT + SIFT combinations works very good.
-    * HARRIS + SIFT, ORB + SIFT combination give some unexpected results.
+    * There are some detector / descriptor combinations give some unexpected results.
     * The "nan" result because all distPrev and distCurr don't satisfy the conditions.
     * The "-inf" result because the ditsRatio median nearly 1.

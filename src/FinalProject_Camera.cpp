@@ -216,13 +216,22 @@ void processImgs(std::string& dataPath, std::string& imgBasePath, std::string& i
 
             vector<cv::DMatch> matches;
             string matcherType = "MAT_FLANN";           // MAT_BF, MAT_FLANN
-            string descriptorCategory = "DES_BINARY";   // DES_BINARY, DES_HOG
             string selectorType = "SEL_KNN";            // SEL_NN, SEL_KNN
+            string descriptorCategory;                  // DES_BINARY, DES_HOG
+
+            if(descriptorType.compare("SIFT") == 0)
+            {
+                descriptorCategory = "DES_HOG";
+            }
+            else 
+            {
+                descriptorCategory = "DES_BINARY";
+            }
 
             matchDescriptors((dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints,
                             (dataBuffer.end() - 2)->descriptors, (dataBuffer.end() - 1)->descriptors,
-                            matches, descriptorType, matcherType, selectorType);
-
+                            matches, descriptorType, matcherType, selectorType, descriptorCategory);
+            
             // store matches in current data frame
             (dataBuffer.end() - 1)->kptMatches = matches;
 
@@ -309,7 +318,7 @@ void processImgs(std::string& dataPath, std::string& imgBasePath, std::string& i
 
                 } // eof TTC computation
             } // eof loop over all BB matches            
-            
+
         }
 
     } // eof loop over all images
@@ -340,7 +349,7 @@ int main(int argc, const char *argv[])
         for(std::string& descriptorType : descriptorTypes){
             try{
                 processImgs(dataPath, imgBasePath, imgPrefix, imgFileType, detectorType, 
-                            descriptorType, imgStartIndex, imgEndIndex, imgStepWidth, imgFillWidth);
+                        descriptorType, imgStartIndex, imgEndIndex, imgStepWidth, imgFillWidth);
             }
             catch(...){
                 std::string trackDir = dataPath+"dat/tracked_data/";

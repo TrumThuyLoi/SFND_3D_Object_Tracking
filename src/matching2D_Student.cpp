@@ -6,7 +6,7 @@ using namespace std;
 
 // Find best matches for keypoints in two camera images based on several matching methods
 void matchDescriptors(std::vector<cv::KeyPoint> &kPtsSource, std::vector<cv::KeyPoint> &kPtsRef, cv::Mat &descSource, cv::Mat &descRef,
-                      std::vector<cv::DMatch> &matches, std::string descriptorType, std::string matcherType, std::string selectorType)
+                      std::vector<cv::DMatch> &matches, std::string descriptorType, std::string matcherType, std::string selectorType, std::string descriptorCategory)
 {
     // configure matcher
     bool crossCheck = false;
@@ -20,13 +20,16 @@ void matchDescriptors(std::vector<cv::KeyPoint> &kPtsSource, std::vector<cv::Key
     }
     else if (matcherType.compare("MAT_FLANN") == 0)
     {
-        if (descSource.type() != CV_32F)
-        {
-            descSource.convertTo(descSource, CV_32F);
-            descRef.convertTo(descRef, CV_32F);
+        if(descriptorCategory.compare("DES_HOG") == 0)
+        {   // using with SIFT
+            matcher = cv::FlannBasedMatcher::create();
         }
-        matcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::FLANNBASED);
-        std::cout << matcherType << " matching completed.\n";
+        else if(descriptorCategory.compare("DES_BINARY") == 0)
+        {   // using with other binary descriptor
+            const cv::Ptr<cv::flann::IndexParams>& indexParams = cv::makePtr<cv::flann::LshIndexParams>(12, 20, 2);
+            matcher = cv::makePtr<cv::FlannBasedMatcher>(indexParams);
+        }
+        std::cout << matcherType << " create matcher completed.\n";
     }
 
     double time_it_takes = 0.0;
@@ -52,6 +55,9 @@ void matchDescriptors(std::vector<cv::KeyPoint> &kPtsSource, std::vector<cv::Key
         const double ratioThreshold = 0.8;
         for (std::vector<cv::DMatch>& knn_match : knn_matches)
         {
+            if(knn_match.size() < 2)
+                continue;
+
             if (knn_match[0].distance < ratioThreshold * knn_match[1].distance)
             {
                 matches.emplace_back(knn_match[0]);
@@ -128,7 +134,7 @@ void descKeypoints(vector<cv::KeyPoint> &keypoints, cv::Mat &img, cv::Mat &descr
     }
 
     // perform feature description
-    std::cout << descriptorType << " Perform feature description\n";
+    std::cout << descriptorType << " perform feature description\n";
     double t = (double)cv::getTickCount();
     extractor->compute(img, keypoints, descriptors);
     t = ((double)cv::getTickCount() - t) / cv::getTickFrequency();
